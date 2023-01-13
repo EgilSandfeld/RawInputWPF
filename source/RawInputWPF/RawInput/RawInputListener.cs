@@ -15,14 +15,14 @@ namespace RawInputWPF.RawInput
     public class RawInputListener
     {
         public event EventHandler<GamepadEventArgs> ButtonsChanged;
-
         public event EventHandler<MouseEventArgs> MouseButtonsChanged;
-
         public event EventHandler<KeyboardEventArgs> KeyDown;
         public event EventHandler<KeyboardEventArgs> KeyUp;
 
         private const int WM_INPUT = 0x00FF;
         private HwndSource _hwndSource;
+
+        public bool IsInitialized => _hwndSource != null;
 
         public void Init(IntPtr hWnd)
         {
@@ -48,6 +48,7 @@ namespace RawInputWPF.RawInput
         public void Clear()
         {
             Device.RawInput -= OnRawInput;
+            Device.MouseInput -= OnMouseInput;
             Device.KeyboardInput -= OnKeyboardInput;
         }
 
