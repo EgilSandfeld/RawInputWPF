@@ -129,8 +129,7 @@ namespace RawInputWPF.ViewModel
         {
             if (e.Buttons.Count > 0)
             {
-                GamepadDeviveName = string.Format(@"{0}", e.DeviceName);
-
+                GamepadDeviveName = string.Format(@"{0}: {1}", e.OemName, e.DeviceName);
                 var sb = new StringBuilder();
                 e.Buttons.ForEach(btn => sb.AppendFormat("{0} ", btn));
                 PressedButtons = sb.ToString();

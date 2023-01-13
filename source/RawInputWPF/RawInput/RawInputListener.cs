@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Input;
 using System.Windows.Interop;
 using RawInputWPF.Helpers;
@@ -33,6 +35,7 @@ namespace RawInputWPF.RawInput
             if (_hwndSource != null)
                 _hwndSource.AddHook(WndProc);
 
+            Device.RegisterDevice(UsagePage.Generic, UsageId.GenericJoystick, DeviceFlags.InputSink, hWnd);
             Device.RegisterDevice(UsagePage.Generic, UsageId.GenericGamepad, DeviceFlags.InputSink, hWnd);
             Device.RegisterDevice(UsagePage.Generic, UsageId.GenericKeyboard, DeviceFlags.InputSink, hWnd);
             Device.RegisterDevice(UsagePage.Generic, UsageId.GenericMouse, DeviceFlags.InputSink, hWnd);
@@ -69,6 +72,9 @@ namespace RawInputWPF.RawInput
                 deviceName = DeviceHelper.SearchDevice(e.Device).DeviceName;
             var evt = new MouseEventArgs(deviceName, e.ButtonFlags);
 
+            if (evt.Buttons == MouseButtonFlags.None)
+                return;
+            
             handler(this, evt);
         }
 
@@ -104,10 +110,9 @@ namespace RawInputWPF.RawInput
                 return;
 
             var deviceName = DeviceHelper.SearchDevice(e.Device).DeviceName;
-            List<ushort> pressedButtons;
-            RawInputParser.Parse(hidInput, out pressedButtons);
+            RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName);
 
-            handler(this, new GamepadEventArgs(pressedButtons, deviceName));
+            handler(this, new GamepadEventArgs(pressedButtons, deviceName, oemName));
         }
     }
 }

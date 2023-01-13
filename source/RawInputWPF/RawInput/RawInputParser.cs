@@ -1,7 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Runtime.ConstrainedExecution;
 using System.Runtime.InteropServices;
+using System.Security;
+using System.Text;
+using Microsoft.Win32;
+using Microsoft.Win32.SafeHandles;
 using SharpDX.RawInput;
 
 
@@ -9,11 +14,14 @@ namespace RawInputWPF.RawInput
 {
     public static class RawInputParser
     {
-        public static bool Parse(HidInputEventArgs hidInput, out List<ushort> pressedButtons)
+        private static StringBuilder devBufer;
+        private static Dictionary<string, string> _oemNames = new ();
+
+        public static bool Parse(HidInputEventArgs hidInput, out List<ushort> pressedButtons, string hidName, out string oemName)
         {
             var preparsedData = IntPtr.Zero;
             pressedButtons = new List<ushort>();
-
+            oemName = hidName;
             try
             {
                 preparsedData = GetPreparsedData(hidInput.Device);
@@ -22,10 +30,10 @@ namespace RawInputWPF.RawInput
 
                 HIDP_CAPS hidCaps;
                 CheckError(HidP_GetCaps(preparsedData, out hidCaps));
-
                 pressedButtons = GetPressedButtons(hidCaps, preparsedData, hidInput.RawData);
+                oemName = GetDeviceName(hidName);
             }
-            catch (Win32Exception e)
+            catch (Win32Exception)
             {
                 return false;
             }
@@ -74,7 +82,7 @@ namespace RawInputWPF.RawInput
             {
                 usagePages.Add(bc.UsagePage);
             }
-
+            
             var res = new List<ushort>();
             foreach (var usagePage in usagePages)
             {
@@ -93,10 +101,40 @@ namespace RawInputWPF.RawInput
             return res;
         }
 
+        private static string GetDeviceName(string hidInterfacePath)
+        {
+            if (_oemNames.ContainsKey(hidInterfacePath))
+                return _oemNames[hidInterfacePath];
+            
+            var vidPid = hidInterfacePath.Replace(@"\\?\HID#", "").Split('#')[0];
+            try
+            {
+                //\\?\HID#VID_044F&PID_B10A#8&27a93c19&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
+                var oemPath = @"System\CurrentControlSet\Control\MediaProperties\PrivateProperties\Joystick\OEM\" + vidPid;
+                RegistryKey key = Registry.CurrentUser.OpenSubKey(oemPath);
+                if (key == null)
+                {
+                    _oemNames.Add(hidInterfacePath, vidPid);
+                    return vidPid;
+                }
+                    
+                var oemName = key.GetValue("OEMName").ToString();
+                _oemNames.Add(hidInterfacePath, oemName);
+                return oemName;
+            }
+            catch (Exception e)
+            {
+                _oemNames.Add(hidInterfacePath, vidPid);
+                return vidPid;
+            }
+        }
+
         #endregion InternalMethods
 
 
         #region NativeHidApi
+
+        private const int ERROR_INVALID_DATA = 13;
 
         private enum HIDP_REPORT_TYPE
         {
@@ -113,8 +151,10 @@ namespace RawInputWPF.RawInput
             public ushort InputReportByteLength;
             public ushort OutputReportByteLength;
             public ushort FeatureReportByteLength;
+
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 17)]
             public ushort[] Reserved;
+
             public ushort NumberLinkCollectionNodes;
             public ushort NumberInputButtonCaps;
             public ushort NumberInputValueCaps;
@@ -130,44 +170,25 @@ namespace RawInputWPF.RawInput
         [StructLayout(LayoutKind.Explicit)]
         private struct HIDP_BUTTON_CAPS
         {
-            [FieldOffset(0)]
-            public ushort UsagePage;
-            [FieldOffset(2)]
-            public byte ReportID;
-            [FieldOffset(3)]
-            public byte IsAlias;
-            [FieldOffset(4)]
-            public ushort BitField;
-            [FieldOffset(6)]
-            public ushort LinkCollection;
-            [FieldOffset(8)]
-            public ushort LinkUsage;
-            [FieldOffset(10)]
-            public ushort LinkUsagePage;
-            [FieldOffset(12)]
-            public byte IsRange;
-            [FieldOffset(13)]
-            public byte IsStringRange;
-            [FieldOffset(14)]
-            public byte IsDesignatorRange;
-            [FieldOffset(15)]
-            public byte IsAbsolute;
-            [FieldOffset(56)]
-            public ushort Usage;
-            [FieldOffset(58)]
-            public ushort Reserved1;
-            [FieldOffset(60)]
-            public ushort StringIndex;
-            [FieldOffset(62)]
-            public ushort Reserved2;
-            [FieldOffset(64)]
-            public ushort DesignatorIndex;
-            [FieldOffset(66)]
-            public ushort Reserved3;
-            [FieldOffset(68)]
-            public ushort DataIndex;
-            [FieldOffset(70)]
-            public ushort Reserved4;
+            [FieldOffset(0)] public ushort UsagePage;
+            [FieldOffset(2)] public byte ReportID;
+            [FieldOffset(3)] public byte IsAlias;
+            [FieldOffset(4)] public ushort BitField;
+            [FieldOffset(6)] public ushort LinkCollection;
+            [FieldOffset(8)] public ushort LinkUsage;
+            [FieldOffset(10)] public ushort LinkUsagePage;
+            [FieldOffset(12)] public byte IsRange;
+            [FieldOffset(13)] public byte IsStringRange;
+            [FieldOffset(14)] public byte IsDesignatorRange;
+            [FieldOffset(15)] public byte IsAbsolute;
+            [FieldOffset(56)] public ushort Usage;
+            [FieldOffset(58)] public ushort Reserved1;
+            [FieldOffset(60)] public ushort StringIndex;
+            [FieldOffset(62)] public ushort Reserved2;
+            [FieldOffset(64)] public ushort DesignatorIndex;
+            [FieldOffset(66)] public ushort Reserved3;
+            [FieldOffset(68)] public ushort DataIndex;
+            [FieldOffset(70)] public ushort Reserved4;
         }
 
         // HID status codes (all codes see in <hidpi.h>).
@@ -193,9 +214,29 @@ namespace RawInputWPF.RawInput
         [DllImport("hid.dll", SetLastError = true)]
         private static extern int HidP_GetUsages(HIDP_REPORT_TYPE reportType, ushort usagePage, ushort linkCollection,
             [In, Out] ushort[] usageList, ref int usageLength, IntPtr preparsedData,
-            [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)] byte[] report, int reportLength);
+            [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)]
+            byte[] report, int reportLength);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct SP_DEVINFO_DATA
+        {
+            public UInt32 cbSize;
+            public Guid ClassGuid;
+            public UInt32 DevInst;
+            public IntPtr Reserved;
+        }
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        static extern bool SetupDiGetDeviceRegistryPropertyW(
+            IntPtr DeviceInfoSet,
+            [In] ref SP_DEVINFO_DATA  DeviceInfoData,
+            UInt32 Property,
+            [Out] out UInt32  PropertyRegDataType,
+            IntPtr PropertyBuffer,
+            UInt32 PropertyBufferSize,
+            [In,Out] ref UInt32 RequiredSize
+        );
 
         #endregion NativeHidApi
     }
-
 }
