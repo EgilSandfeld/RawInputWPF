@@ -14,14 +14,14 @@ namespace RawInputWPF.RawInput
 {
     public static class RawInputParser
     {
-        private static StringBuilder devBufer;
         private static Dictionary<string, string> _oemNames = new ();
 
-        public static bool Parse(HidInputEventArgs hidInput, out List<ushort> pressedButtons, string hidName, out string oemName)
+        public static bool Parse(HidInputEventArgs hidInput, out List<ushort> pressedButtons, string hidName, out string oemName, out bool isFFB)
         {
             var preparsedData = IntPtr.Zero;
             pressedButtons = new List<ushort>();
             oemName = hidName;
+            isFFB = false;
             try
             {
                 preparsedData = GetPreparsedData(hidInput.Device);
@@ -30,7 +30,7 @@ namespace RawInputWPF.RawInput
 
                 HIDP_CAPS hidCaps;
                 CheckError(HidP_GetCaps(preparsedData, out hidCaps));
-                pressedButtons = GetPressedButtons(hidCaps, preparsedData, hidInput.RawData);
+                (pressedButtons, isFFB) = GetPressedButtons(hidCaps, preparsedData, hidInput.RawData);
                 oemName = GetDeviceName(hidName);
             }
             catch (Win32Exception)
@@ -71,8 +71,9 @@ namespace RawInputWPF.RawInput
             return preparsedData;
         }
 
-        private static List<ushort> GetPressedButtons(HIDP_CAPS hidCaps, IntPtr preparsedData, byte[] rawInputData)
+        private static (List<ushort>, bool) GetPressedButtons(HIDP_CAPS hidCaps, IntPtr preparsedData, byte[] rawInputData)
         {
+            var ffbMotorsLength = hidCaps.NumberOutputValueCaps;
             var buttonCapsLength = hidCaps.NumberInputButtonCaps;
             var buttonCaps = new HIDP_BUTTON_CAPS[buttonCapsLength];
             CheckError(HidP_GetButtonCaps(HIDP_REPORT_TYPE.HidP_Input, buttonCaps, ref buttonCapsLength, preparsedData));
@@ -98,7 +99,7 @@ namespace RawInputWPF.RawInput
                 }
             }
 
-            return res;
+            return (res, ffbMotorsLength > 0);
         }
 
         private static string GetDeviceName(string hidInterfacePath)
@@ -122,7 +123,7 @@ namespace RawInputWPF.RawInput
                 _oemNames.Add(hidInterfacePath, oemName);
                 return oemName;
             }
-            catch (Exception e)
+            catch (Exception)
             {
                 _oemNames.Add(hidInterfacePath, vidPid);
                 return vidPid;

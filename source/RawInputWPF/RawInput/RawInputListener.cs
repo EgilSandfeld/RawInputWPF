@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Windows.Input;
 using System.Windows.Interop;
 using RawInputWPF.Helpers;
@@ -21,6 +18,7 @@ namespace RawInputWPF.RawInput
 
         private const int WM_INPUT = 0x00FF;
         private HwndSource _hwndSource;
+        private IntPtr hWindow;
 
         public bool IsInitialized => _hwndSource != null;
 
@@ -31,18 +29,36 @@ namespace RawInputWPF.RawInput
                 return;
             }
 
+            hWindow = hWnd;
             _hwndSource = HwndSource.FromHwnd(hWnd);
             if (_hwndSource != null)
                 _hwndSource.AddHook(WndProc);
 
-            Device.RegisterDevice(UsagePage.Generic, UsageId.GenericJoystick, DeviceFlags.InputSink, hWnd);
-            Device.RegisterDevice(UsagePage.Generic, UsageId.GenericGamepad, DeviceFlags.InputSink, hWnd);
-            Device.RegisterDevice(UsagePage.Generic, UsageId.GenericKeyboard, DeviceFlags.InputSink, hWnd);
-            Device.RegisterDevice(UsagePage.Generic, UsageId.GenericMouse, DeviceFlags.InputSink, hWnd);
+            //RegisterDeviceType(UsagePage.Generic, UsageId.GenericKeyboard);
+            //RegisterDeviceType(UsagePage.Generic, UsageId.GenericMouse);
+            RegisterDeviceType(UsagePage.Generic, UsageId.GenericGamepad);
+            RegisterDeviceType(UsagePage.Generic, UsageId.GenericJoystick);
+            RegisterDeviceType(UsagePage.Generic, UsageId.GenericPointer);
 
             Device.RawInput += OnRawInput;
             Device.KeyboardInput += OnKeyboardInput;
             Device.MouseInput += OnMouseInput;
+        }
+
+        private Dictionary<UsagePage, List<UsageId>> _deviceTypes = new ();
+        public bool RegisterDeviceType(UsagePage up, UsageId ui)
+        {
+            if (_deviceTypes.ContainsKey(up) && _deviceTypes[up].Contains(ui))
+                return false;
+            
+            Device.RegisterDevice(up, ui, DeviceFlags.InputSink, hWindow);
+            
+            if (!_deviceTypes.ContainsKey(up))
+                _deviceTypes.Add(up, new List<UsageId> { ui });
+            else    
+                _deviceTypes[up].Add(ui);
+            
+            return true;
         }
 
         public void Clear()
@@ -70,7 +86,11 @@ namespace RawInputWPF.RawInput
 
             var deviceName = "";
             if (e.Device != IntPtr.Zero)
-                deviceName = DeviceHelper.SearchDevice(e.Device).DeviceName;
+                deviceName = DeviceHelper.SearchDevice(e.Device)?.DeviceName;
+
+            if (string.IsNullOrEmpty(deviceName))
+                return;
+            
             var evt = new MouseEventArgs(deviceName, e.ButtonFlags);
 
             if (evt.Buttons == MouseButtonFlags.None)
@@ -90,7 +110,10 @@ namespace RawInputWPF.RawInput
 
             var deviceName = "";
             if (e.Device != IntPtr.Zero)
-                deviceName = DeviceHelper.SearchDevice(e.Device).DeviceName;
+                deviceName = DeviceHelper.SearchDevice(e.Device)?.DeviceName;
+
+            if (string.IsNullOrEmpty(deviceName))
+                return;
 
             var key = KeyInterop.KeyFromVirtualKey((int)e.Key);
             var evt = new KeyboardEventArgs(deviceName, key);
@@ -110,10 +133,14 @@ namespace RawInputWPF.RawInput
             if (e.Device == IntPtr.Zero)
                 return;
 
-            var deviceName = DeviceHelper.SearchDevice(e.Device).DeviceName;
-            RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName);
+            var deviceName = DeviceHelper.SearchDevice(e.Device)?.DeviceName;
 
-            handler(this, new GamepadEventArgs(pressedButtons, deviceName, oemName));
+            if (string.IsNullOrEmpty(deviceName))
+                return;
+
+            RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName, out var isFFB);
+
+            handler(this, new GamepadEventArgs(pressedButtons, deviceName, oemName, isFFB));
         }
     }
 }
