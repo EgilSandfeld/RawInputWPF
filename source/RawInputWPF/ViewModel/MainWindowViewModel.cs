@@ -104,7 +104,7 @@ namespace RawInputWPF.ViewModel
             Application.Current.MainWindow.Loaded -= OnMainWindowLoaded;
 
             var wih = new WindowInteropHelper(Application.Current.MainWindow);
-            _rawInputListener.Init(wih.Handle);
+            _rawInputListener.Init(wih.Handle, null);
 
             Application.Current.MainWindow.Unloaded += OnMainWindowUnloaded;
             _rawInputListener.ButtonsChanged += OnButtonsChanged;

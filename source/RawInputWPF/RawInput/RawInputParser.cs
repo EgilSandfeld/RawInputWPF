@@ -1,14 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Runtime.ConstrainedExecution;
+using System.Linq;
 using System.Runtime.InteropServices;
-using System.Security;
-using System.Text;
 using Microsoft.Win32;
-using Microsoft.Win32.SafeHandles;
+using Serilog;
 using SharpDX.RawInput;
-
 
 namespace RawInputWPF.RawInput
 {
@@ -30,11 +27,12 @@ namespace RawInputWPF.RawInput
 
                 HIDP_CAPS hidCaps;
                 CheckError(HidP_GetCaps(preparsedData, out hidCaps));
-                (pressedButtons, isFFB) = GetPressedButtons(hidCaps, preparsedData, hidInput.RawData);
                 oemName = GetDeviceName(hidName);
+                (pressedButtons, isFFB) = GetPressedButtons(hidCaps, preparsedData, hidInput.RawData);
             }
-            catch (Win32Exception)
+            catch (Win32Exception ex)
             {
+                Log.Verbose("RawInputParser.Parse: Failed with error: {Message} | retCode: {RetCode} | hidName: {HidName}", ex.Message, ex.Data.Contains("retCode") ? ex.Data["retCode"] : "None", hidName);
                 return false;
             }
             finally
@@ -53,9 +51,11 @@ namespace RawInputWPF.RawInput
 
         private static void CheckError(int retCode)
         {
-            if (retCode != HIDP_STATUS_SUCCESS)
+            if (retCode is not (HIDP_STATUS_SUCCESS or HIDP_STATUS_INCOMPATIBLE_REPORT_ID))
             {
-                throw new Win32Exception();
+                var ex = new Win32Exception();
+                ex.Data.Add("retCode", retCode);
+                throw ex;
             }
         }
 
@@ -106,28 +106,81 @@ namespace RawInputWPF.RawInput
         {
             if (_oemNames.ContainsKey(hidInterfacePath))
                 return _oemNames[hidInterfacePath];
-            
-            var vidPid = hidInterfacePath.Replace(@"\\?\HID#", "").Split('#')[0];
+
+            //\\?\HID#VID_044F&PID_B10A#8&27a93c19&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
+            //\\?\HID#VID_044F&PID_B10A&MI_00#8&27a93c19&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
+            var pathSplit = hidInterfacePath.Replace(@"\\?\HID#", "").Split('#')[0].Split('&');
+            var vid = pathSplit.FirstOrDefault(x => x.StartsWith("VID"));
+            var pid = pathSplit.FirstOrDefault(x => x.StartsWith("PID"));
+            var vidPid = $"{vid}&{pid}";
             try
             {
-                //\\?\HID#VID_044F&PID_B10A#8&27a93c19&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}
-                var oemPath = @"System\CurrentControlSet\Control\MediaProperties\PrivateProperties\Joystick\OEM\" + vidPid;
-                RegistryKey key = Registry.CurrentUser.OpenSubKey(oemPath);
-                if (key == null)
+                if (GetDeviceNameByJoystickOEM(vidPid, out var oemName))
                 {
-                    _oemNames.Add(hidInterfacePath, vidPid);
-                    return vidPid;
+                    _oemNames.Add(hidInterfacePath, oemName);
+                    return oemName;
+                }
+                
+                if (GetDeviceNameByHIDCLASS(hidInterfacePath, out oemName))
+                {
+                    _oemNames.Add(hidInterfacePath, oemName);
+                    return oemName;
                 }
                     
-                var oemName = key.GetValue("OEMName").ToString();
-                _oemNames.Add(hidInterfacePath, oemName);
-                return oemName;
-            }
-            catch (Exception)
-            {
                 _oemNames.Add(hidInterfacePath, vidPid);
                 return vidPid;
             }
+            catch (Exception ex)
+            {
+                Log.Verbose("RawInputParser.GetDeviceName: Error: {Message}, vidPid: {VidPid}, hidInterfacePath: {HidInterfacePath}", ex.Message, vidPid,hidInterfacePath);
+                _oemNames.Add(hidInterfacePath, vidPid);
+                return vidPid;
+            }
+        }
+
+        
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="vidPid"></param>
+        /// <param name="oemName"></param>
+        /// <returns></returns>
+        private static bool GetDeviceNameByJoystickOEM(string vidPid, out string oemName)
+        {
+            oemName = string.Empty;
+            var oemPath = @"System\CurrentControlSet\Control\MediaProperties\PrivateProperties\Joystick\OEM\" + vidPid;
+            var key = Registry.CurrentUser.OpenSubKey(oemPath);
+
+            var oemNameObject = key?.GetValue("OEMName");
+            if (oemNameObject == null)
+                return false;
+                
+            oemName = oemNameObject.ToString();
+            return true;
+        }
+
+        private static bool GetDeviceNameByHIDCLASS(string hidInterfacePath, out string oemName)
+        {
+            oemName = string.Empty;
+            if (!hidInterfacePath.Contains("HIDCLASS"))
+                return false;
+            
+            //\\?\HID#HIDCLASS&Col02#1&4784345&1&0001#{4d1e55b2-f16f-11cf-88cb-001111000030}
+            var hidclass = hidInterfacePath.Replace(@"\\?\HID#HIDCLASS&Col02#1&4784345&1&", "").Split('#')[0];
+            var oemPath = $@"System\CurrentControlSet\Enum\ROOT\HIDCLASS\{hidclass}";
+            RegistryKey key = Registry.LocalMachine.OpenSubKey(oemPath);
+
+            var deviceDescObject = key?.GetValue("DeviceDesc");
+            if (deviceDescObject == null)
+                return false;
+
+            var deviceDesc = deviceDescObject.ToString();
+            var deviceDescSplit = deviceDesc.Split(';');
+            if (deviceDescSplit.Length <= 1)
+                return false;
+
+            oemName = deviceDescSplit[1];
+            return true;
         }
 
         #endregion InternalMethods
@@ -194,6 +247,8 @@ namespace RawInputWPF.RawInput
 
         // HID status codes (all codes see in <hidpi.h>).
         private const int HIDP_STATUS_SUCCESS = (0x0 << 28) | (0x11 << 16) | 0;
+        
+        private const int HIDP_STATUS_INCOMPATIBLE_REPORT_ID = -1072627702;
 
         // https://msdn.microsoft.com/ru-ru/library/windows/desktop/ms645597(v=vs.85).aspx
         // Commands for GetRawInputDeviceInfo

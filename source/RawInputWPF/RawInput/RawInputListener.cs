@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows.Input;
 using System.Windows.Interop;
 using RawInputWPF.Helpers;
+using Serilog;
+using Serilog.Core;
 using SharpDX.Multimedia;
 using SharpDX.RawInput;
 
@@ -16,19 +19,22 @@ namespace RawInputWPF.RawInput
         public event EventHandler<KeyboardEventArgs> KeyDown;
         public event EventHandler<KeyboardEventArgs> KeyUp;
 
+        public static ILogger Log;
+
         private const int WM_INPUT = 0x00FF;
         private HwndSource _hwndSource;
         private IntPtr hWindow;
 
         public bool IsInitialized => _hwndSource != null;
 
-        public void Init(IntPtr hWnd)
+        public void Init(IntPtr hWnd, ILogger logger)
         {
             if (_hwndSource != null)
             {
                 return;
             }
 
+            Log = logger ?? new LoggerConfiguration().CreateLogger();
             hWindow = hWnd;
             _hwndSource = HwndSource.FromHwnd(hWnd);
             if (_hwndSource != null)
@@ -36,28 +42,41 @@ namespace RawInputWPF.RawInput
 
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericKeyboard);
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericMouse);
-            RegisterDeviceType(UsagePage.Generic, UsageId.GenericGamepad);
-            RegisterDeviceType(UsagePage.Generic, UsageId.GenericJoystick);
-            RegisterDeviceType(UsagePage.Generic, UsageId.GenericPointer);
+            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.GenericGamepad));
+            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.GenericJoystick));
+            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.GenericPointer));
+            
+            //FANATEC ClubSport Wheel Base V2.5
+            //FANATEC Podium Wheel Base DD1
+            //FANATEC Podium Wheel Base DD2
+            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.LedSelectedIndicator));
+            
+            //Simucube 2 Pro
+            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.LedCompose));
 
             Device.RawInput += OnRawInput;
             Device.KeyboardInput += OnKeyboardInput;
             Device.MouseInput += OnMouseInput;
         }
 
-        private Dictionary<UsagePage, List<UsageId>> _deviceTypes = new ();
-        public bool RegisterDeviceType(UsagePage up, UsageId ui)
+        private Dictionary<UsagePage, List<string>> _deviceTypes = new ();
+        public bool RegisterDeviceType(UsagePage up, string usageIdString)
         {
-            if (_deviceTypes.ContainsKey(up) && _deviceTypes[up].Contains(ui))
+            if (_deviceTypes.ContainsKey(up) && _deviceTypes[up].Contains(usageIdString))
+            {
+                Log.Verbose("RawInputListener.RegisterDeviceType: Device type already added: {UsagePage}:{UsageId}", up, usageIdString);
                 return false;
-            
-            Device.RegisterDevice(up, ui, DeviceFlags.InputSink, hWindow);
+            }
+
+            var usageId = (UsageId)Enum.Parse(typeof(UsageId), usageIdString);
+            Device.RegisterDevice(up, usageId, DeviceFlags.InputSink, hWindow);
             
             if (!_deviceTypes.ContainsKey(up))
-                _deviceTypes.Add(up, new List<UsageId> { ui });
+                _deviceTypes.Add(up, new List<string> { usageIdString });
             else    
-                _deviceTypes[up].Add(ui);
+                _deviceTypes[up].Add(usageIdString);
             
+            Log.Verbose("RawInputListener.RegisterDeviceType: Device type added: {UsagePage}:{UsageId}", up, usageIdString);
             return true;
         }
 
@@ -138,7 +157,8 @@ namespace RawInputWPF.RawInput
             if (string.IsNullOrEmpty(deviceName))
                 return;
 
-            RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName, out var isFFB);
+            if (!RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName, out var isFFB))
+                return;
 
             handler(this, new GamepadEventArgs(pressedButtons, deviceName, oemName, isFFB));
         }
