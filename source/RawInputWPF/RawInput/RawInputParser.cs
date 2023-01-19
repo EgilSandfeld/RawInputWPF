@@ -4,7 +4,6 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
-using Serilog;
 using SharpDX.RawInput;
 
 namespace RawInputWPF.RawInput
@@ -12,6 +11,7 @@ namespace RawInputWPF.RawInput
     public static class RawInputParser
     {
         private static Dictionary<string, string> _oemNames = new ();
+        private static readonly List<string> RetCodeErrors = new();
 
         public static bool Parse(HidInputEventArgs hidInput, out List<ushort> pressedButtons, string hidName, out string oemName, out bool isFFB)
         {
@@ -26,13 +26,18 @@ namespace RawInputWPF.RawInput
                     return false;
 
                 HIDP_CAPS hidCaps;
-                CheckError(HidP_GetCaps(preparsedData, out hidCaps));
+                if (!CheckError(HidP_GetCaps(preparsedData, out hidCaps), -2, 0))
+                    return false;
+                
                 oemName = GetDeviceName(hidName);
                 (pressedButtons, isFFB) = GetPressedButtons(hidCaps, preparsedData, hidInput.RawData);
             }
             catch (Win32Exception ex)
             {
-                Log.Verbose("RawInputParser.Parse: Failed with error: {Message} | retCode: {RetCode} | hidName: {HidName}", ex.Message, ex.Data.Contains("retCode") ? ex.Data["retCode"] : "None", hidName);
+                var exceptionId = ex.Data.Contains("ExceptionId") ? ex.Data["ExceptionId"].ToString() : "None";
+                var errorMsg = $"RawInputParser.Parse: {ex.Message} | ExceptionId: {exceptionId}";
+                RawInputListener.Log.Verbose(errorMsg);
+                RawInputListener.ExceptionLog?.Invoke(ex, errorMsg);
                 return false;
             }
             finally
@@ -49,14 +54,22 @@ namespace RawInputWPF.RawInput
 
         #region InternalMethods
 
-        private static void CheckError(int retCode)
+        private static bool CheckError(int retCode, int usagePage, int count)
         {
-            if (retCode is not (HIDP_STATUS_SUCCESS or HIDP_STATUS_INCOMPATIBLE_REPORT_ID))
-            {
-                var ex = new Win32Exception();
-                ex.Data.Add("retCode", retCode);
-                throw ex;
-            }
+            if (retCode is HIDP_STATUS_SUCCESS or HIDP_STATUS_INCOMPATIBLE_REPORT_ID or HIDP_STATUS_USAGE_NOT_FOUND/* or HIDP_STATUS_INVALID_REPORT_LENGTH*/) 
+                return true;
+            
+            var error = Marshal.GetLastWin32Error();
+            var hResult = Marshal.GetHRForLastWin32Error();
+            var exceptionId = $"{error}|{hResult}|{usagePage}|{retCode}|{count}";
+                
+            if (RetCodeErrors.Contains(exceptionId)) 
+                return false;
+                
+            RetCodeErrors.Add(exceptionId);
+            var ex = new Win32Exception();
+            ex.Data.Add("ExceptionId", exceptionId);
+            throw ex;
         }
 
         private static IntPtr GetPreparsedData(IntPtr device)
@@ -76,27 +89,24 @@ namespace RawInputWPF.RawInput
             var ffbMotorsLength = hidCaps.NumberOutputValueCaps;
             var buttonCapsLength = hidCaps.NumberInputButtonCaps;
             var buttonCaps = new HIDP_BUTTON_CAPS[buttonCapsLength];
-            CheckError(HidP_GetButtonCaps(HIDP_REPORT_TYPE.HidP_Input, buttonCaps, ref buttonCapsLength, preparsedData));
+            var res = new List<ushort>();
+            if (!CheckError(HidP_GetButtonCaps(HIDP_REPORT_TYPE.HidP_Input, buttonCaps, ref buttonCapsLength, preparsedData), -1, buttonCapsLength))
+                return (res, ffbMotorsLength > 0);
 
             var usagePages = new HashSet<ushort>();
             foreach (var bc in buttonCaps)
-            {
                 usagePages.Add(bc.UsagePage);
-            }
             
-            var res = new List<ushort>();
             foreach (var usagePage in usagePages)
             {
                 int usageListLength = hidCaps.NumberInputButtonCaps;
                 var usageList = new ushort[usageListLength];
 
-                CheckError(HidP_GetUsages(HIDP_REPORT_TYPE.HidP_Input, usagePage, 0,
-                    usageList, ref usageListLength, preparsedData, rawInputData, rawInputData.Length));
+                if (!CheckError(HidP_GetUsages(HIDP_REPORT_TYPE.HidP_Input, usagePage, 0,  usageList, ref usageListLength, preparsedData, rawInputData, rawInputData.Length), usagePage, usageListLength))
+                    return (res, ffbMotorsLength > 0);
 
                 for (var i = 0; i < usageListLength; ++i)
-                {
                     res.Add(usageList[i]);
-                }
             }
 
             return (res, ffbMotorsLength > 0);
@@ -132,7 +142,7 @@ namespace RawInputWPF.RawInput
             }
             catch (Exception ex)
             {
-                Log.Verbose("RawInputParser.GetDeviceName: Error: {Message}, vidPid: {VidPid}, hidInterfacePath: {HidInterfacePath}", ex.Message, vidPid,hidInterfacePath);
+                RawInputListener.Log.Verbose("RawInputParser.GetDeviceName: Error: {Message}, vidPid: {VidPid}, hidInterfacePath: {HidInterfacePath}", ex.Message, vidPid,hidInterfacePath);
                 _oemNames.Add(hidInterfacePath, vidPid);
                 return vidPid;
             }
@@ -248,7 +258,20 @@ namespace RawInputWPF.RawInput
         // HID status codes (all codes see in <hidpi.h>).
         private const int HIDP_STATUS_SUCCESS = (0x0 << 28) | (0x11 << 16) | 0;
         
+        /// <summary>
+        /// Indicates that the buttons states specified by the parameter UsagePage is known, but cannot be found in the data provided at Report.
+        /// </summary>
         private const int HIDP_STATUS_INCOMPATIBLE_REPORT_ID = -1072627702;
+        
+        /// <summary>
+        /// Indicates that button states specified by the parameter UsagePage cannot be found in any data report for the HiD device.
+        /// </summary>
+        private const int HIDP_STATUS_USAGE_NOT_FOUND = -1072627708;
+        
+        /// <summary>
+        /// Indicates that the report length provided in ReportLength is not the expected length of a report of the type specified in ReportType.
+        /// </summary>
+        private const int HIDP_STATUS_INVALID_REPORT_LENGTH  = -1072627709;
 
         // https://msdn.microsoft.com/ru-ru/library/windows/desktop/ms645597(v=vs.85).aspx
         // Commands for GetRawInputDeviceInfo
@@ -272,26 +295,6 @@ namespace RawInputWPF.RawInput
             [In, Out] ushort[] usageList, ref int usageLength, IntPtr preparsedData,
             [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)]
             byte[] report, int reportLength);
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct SP_DEVINFO_DATA
-        {
-            public UInt32 cbSize;
-            public Guid ClassGuid;
-            public UInt32 DevInst;
-            public IntPtr Reserved;
-        }
-
-        [DllImport("setupapi.dll", SetLastError = true)]
-        static extern bool SetupDiGetDeviceRegistryPropertyW(
-            IntPtr DeviceInfoSet,
-            [In] ref SP_DEVINFO_DATA  DeviceInfoData,
-            UInt32 Property,
-            [Out] out UInt32  PropertyRegDataType,
-            IntPtr PropertyBuffer,
-            UInt32 PropertyBufferSize,
-            [In,Out] ref UInt32 RequiredSize
-        );
 
         #endregion NativeHidApi
     }

@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Windows.Input;
 using System.Windows.Interop;
 using RawInputWPF.Helpers;
 using Serilog;
-using Serilog.Core;
 using SharpDX.Multimedia;
 using SharpDX.RawInput;
 
@@ -20,6 +18,8 @@ namespace RawInputWPF.RawInput
         public event EventHandler<KeyboardEventArgs> KeyUp;
 
         public static ILogger Log;
+        public static Action<Exception, string> ExceptionLog { get; set; }
+
 
         private const int WM_INPUT = 0x00FF;
         private HwndSource _hwndSource;
@@ -27,7 +27,7 @@ namespace RawInputWPF.RawInput
 
         public bool IsInitialized => _hwndSource != null;
 
-        public void Init(IntPtr hWnd, ILogger logger)
+        public void Init(IntPtr hWnd, ILogger logger, Action<Exception, string> exceptionLogger)
         {
             if (_hwndSource != null)
             {
@@ -35,6 +35,7 @@ namespace RawInputWPF.RawInput
             }
 
             Log = logger ?? new LoggerConfiguration().CreateLogger();
+            ExceptionLog = exceptionLogger;
             hWindow = hWnd;
             _hwndSource = HwndSource.FromHwnd(hWnd);
             if (_hwndSource != null)
@@ -58,6 +59,7 @@ namespace RawInputWPF.RawInput
             Device.KeyboardInput += OnKeyboardInput;
             Device.MouseInput += OnMouseInput;
         }
+
 
         private Dictionary<UsagePage, List<string>> _deviceTypes = new ();
         public bool RegisterDeviceType(UsagePage up, string usageIdString)
