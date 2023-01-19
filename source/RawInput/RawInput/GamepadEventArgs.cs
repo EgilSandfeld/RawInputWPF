@@ -1,7 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
-namespace RawInputWPF.RawInput
+namespace RawInput.RawInput
 {
     public class GamepadEventArgs : EventArgs
     {

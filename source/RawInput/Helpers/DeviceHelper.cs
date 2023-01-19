@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SharpDX.RawInput;
 
-
-namespace RawInputWPF.Helpers
+namespace RawInput.Helpers
 {
     public static class DeviceHelper
     {

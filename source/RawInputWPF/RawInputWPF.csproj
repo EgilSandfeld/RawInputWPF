@@ -116,13 +116,6 @@
       <DependentUpon>App.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Compile Include="Helpers\DeviceHelper.cs" />
-    <Compile Include="RawInput\EventArgs.cs" />
-    <Compile Include="RawInput\GamepadEventArgs.cs" />
-    <Compile Include="RawInput\KeyboardEventArgs.cs" />
-    <Compile Include="RawInput\MouseEventArgs.cs" />
-    <Compile Include="RawInput\RawInputListener.cs" />
-    <Compile Include="RawInput\RawInputParser.cs" />
     <Compile Include="View\MainWindow.xaml.cs">
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
@@ -156,6 +149,12 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RawInput\RawInput.csproj">
+      <Project>{6fe538fc-a44c-4c92-a154-eccbbeccf9e5}</Project>
+      <Name>RawInput</Name>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

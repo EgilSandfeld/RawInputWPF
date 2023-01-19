@@ -2,13 +2,12 @@
 using System.Collections.Generic;
 using System.Windows.Input;
 using System.Windows.Interop;
-using RawInputWPF.Helpers;
+using RawInput.Helpers;
 using Serilog;
 using SharpDX.Multimedia;
 using SharpDX.RawInput;
 
-
-namespace RawInputWPF.RawInput
+namespace RawInput.RawInput
 {
     public class RawInputListener
     {

@@ -2,7 +2,7 @@
 using System.Windows;
 using System.Windows.Interop;
 using GalaSoft.MvvmLight;
-using RawInputWPF.RawInput;
+using RawInput.RawInput;
 using SharpDX.RawInput;
 
 

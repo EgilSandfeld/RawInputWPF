@@ -1,7 +1,6 @@
 ﻿using System.Windows.Input;
 
-
-namespace RawInputWPF.RawInput
+namespace RawInput.RawInput
 {
     public class KeyboardEventArgs : EventArgs
     {

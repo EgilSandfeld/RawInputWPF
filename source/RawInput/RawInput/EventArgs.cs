@@ -1,4 +1,4 @@
-﻿namespace RawInputWPF.RawInput
+﻿namespace RawInput.RawInput
 {
     public class EventArgs
     {

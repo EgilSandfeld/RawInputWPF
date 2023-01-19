@@ -5,6 +5,8 @@ VisualStudioVersion = 12.0.40629.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawInputWPF", "RawInputWPF\RawInputWPF.csproj", "{BB563957-E022-4DC3-8B6E-0030632CA4C8}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RawInput", "RawInput\RawInput.csproj", "{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,14 @@ Global
 		{BB563957-E022-4DC3-8B6E-0030632CA4C8}.Debug|x64.Build.0 = Debug|x64
 		{BB563957-E022-4DC3-8B6E-0030632CA4C8}.Release|x64.ActiveCfg = Release|x64
 		{BB563957-E022-4DC3-8B6E-0030632CA4C8}.Release|x64.Build.0 = Release|x64
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Debug|x64.ActiveCfg = Debug|x64
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Debug|x64.Build.0 = Debug|x64
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Release|x64.ActiveCfg = Release|x64
+		{6FE538FC-A44C-4C92-A154-ECCBBECCF9E5}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

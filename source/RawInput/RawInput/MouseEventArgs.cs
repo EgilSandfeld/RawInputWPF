@@ -1,7 +1,6 @@
 ﻿using SharpDX.RawInput;
 
-
-namespace RawInputWPF.RawInput
+namespace RawInput.RawInput
 {
     public class MouseEventArgs : EventArgs
     {

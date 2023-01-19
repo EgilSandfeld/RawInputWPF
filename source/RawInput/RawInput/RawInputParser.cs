@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using SharpDX.RawInput;
 
-namespace RawInputWPF.RawInput
+namespace RawInput.RawInput
 {
     public static class RawInputParser
     {
