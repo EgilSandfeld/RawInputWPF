@@ -13,6 +13,15 @@ namespace RawInput.RawInput
         private static Dictionary<string, string> _oemNames = new ();
         private static readonly List<string> RetCodeErrors = new();
 
+        /// <summary>
+        /// Logic explained: https://www.codeproject.com/Articles/185522/Using-the-Raw-Input-API-to-Process-Joystick-Input
+        /// </summary>
+        /// <param name="hidInput"></param>
+        /// <param name="pressedButtons"></param>
+        /// <param name="hidName"></param>
+        /// <param name="oemName"></param>
+        /// <param name="isFFB"></param>
+        /// <returns></returns>
         public static bool Parse(HidInputEventArgs hidInput, out List<ushort> pressedButtons, string hidName, out string oemName, out bool isFFB)
         {
             var preparsedData = IntPtr.Zero;
@@ -26,7 +35,12 @@ namespace RawInput.RawInput
                     return false;
 
                 HIDP_CAPS hidCaps;
-                if (!CheckError(HidP_GetCaps(preparsedData, out hidCaps), -2, 0))
+
+                var getCapsResult = HidP_GetCaps(preparsedData, out hidCaps);
+                if (getCapsResult == HIDP_STATUS_INVALID_PREPARSED_DATA)
+                    return false;
+                
+                if (!CheckError(getCapsResult, -2, 0))
                     return false;
                 
                 oemName = GetDeviceName(hidName);
@@ -56,7 +70,8 @@ namespace RawInput.RawInput
 
         private static bool CheckError(int retCode, int usagePage, int count)
         {
-            if (retCode is HIDP_STATUS_SUCCESS or HIDP_STATUS_INCOMPATIBLE_REPORT_ID or HIDP_STATUS_USAGE_NOT_FOUND/* or HIDP_STATUS_INVALID_REPORT_LENGTH*/) 
+            //Why to ignore HIDP_STATUS_INCOMPATIBLE_REPORT_ID: https://www.codeproject.com/Articles/185522/Using-the-Raw-Input-API-to-Process-Joystick-Input?msg=3866398#xx3866398xx
+            if (retCode is HIDP_STATUS_SUCCESS or HIDP_STATUS_INCOMPATIBLE_REPORT_ID or HIDP_STATUS_USAGE_NOT_FOUND/* or HIDP_STATUS_INVALID_REPORT_LENGTH or HIDP_STATUS_INVALID_PREPARSED_DATA*/) 
                 return true;
             
             var error = Marshal.GetLastWin32Error();
@@ -93,19 +108,44 @@ namespace RawInput.RawInput
             if (!CheckError(HidP_GetButtonCaps(HIDP_REPORT_TYPE.HidP_Input, buttonCaps, ref buttonCapsLength, preparsedData), -1, buttonCapsLength))
                 return (res, ffbMotorsLength > 0);
 
-            var usagePages = new HashSet<ushort>();
-            foreach (var bc in buttonCaps)
-                usagePages.Add(bc.UsagePage);
+            //var usagePages = new HashSet<ushort>();
+            //foreach (var bc in buttonCaps)
+            //    usagePages.Add(bc.UsagePage);
             
-            foreach (var usagePage in usagePages)
+            // foreach (var usagePage in usagePages)
+            foreach (var buttonCap in buttonCaps)
             {
-                int usageListLength = hidCaps.NumberInputButtonCaps;
-                var usageList = new ushort[usageListLength];
+                // int usageListLength = hidCaps.NumberInputButtonCaps;
+                var buttonsLength = HidP_MaxUsageListLength(HIDP_REPORT_TYPE.HidP_Input, buttonCap.UsagePage, preparsedData);
+                
+                if (buttonsLength <= 0)
+                    buttonsLength = buttonCap.Reserved1;
+                
+                if (buttonsLength <= 0)
+                    continue;
+                
+                var usageList = new ushort[buttonsLength];
 
-                if (!CheckError(HidP_GetUsages(HIDP_REPORT_TYPE.HidP_Input, usagePage, 0,  usageList, ref usageListLength, preparsedData, rawInputData, rawInputData.Length), usagePage, usageListLength))
+                var result = HidP_GetUsages(HIDP_REPORT_TYPE.HidP_Input, buttonCap.UsagePage, 0/*buttonCap.LinkCollection*/,  usageList, ref buttonsLength, preparsedData, rawInputData, rawInputData.Length);
+
+                switch (result)
+                {
+                    //The collection does not contain any buttons on the specified usage page in any report of the specified report type.
+                    //https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/hidpi/nf-hidpi-hidp_getusages
+                    case HIDP_STATUS_USAGE_NOT_FOUND:
+                    //The usage page might not contain buttons Why to continue from HIDP_STATUS_INCOMPATIBLE_REPORT_ID
+                    //https://www.codeproject.com/Articles/185522/Using-the-Raw-Input-API-to-Process-Joystick-Input?msg=3866398#xx3866398xx
+                    case HIDP_STATUS_INCOMPATIBLE_REPORT_ID:
+                    //Try continuing from this issue
+                    //Indicates that the report length provided in ReportLength is not the expected length of a report of the type specified in ReportType.
+                    case HIDP_STATUS_INVALID_REPORT_LENGTH:
+                        continue;
+                }
+
+                if (!CheckError(result, buttonCap.UsagePage, buttonsLength))
                     return (res, ffbMotorsLength > 0);
 
-                for (var i = 0; i < usageListLength; ++i)
+                for (var i = 0; i < buttonsLength; ++i)
                     res.Add(usageList[i]);
             }
 
@@ -147,14 +187,7 @@ namespace RawInput.RawInput
                 return vidPid;
             }
         }
-
         
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="vidPid"></param>
-        /// <param name="oemName"></param>
-        /// <returns></returns>
         private static bool GetDeviceNameByJoystickOEM(string vidPid, out string oemName)
         {
             oemName = string.Empty;
@@ -257,6 +290,11 @@ namespace RawInput.RawInput
 
         // HID status codes (all codes see in <hidpi.h>).
         private const int HIDP_STATUS_SUCCESS = (0x0 << 28) | (0x11 << 16) | 0;
+
+        #region HIDP Error Codes
+
+        //USB HID usage table http://www.freebsddiary.org/APC/usb_hid_usages.php
+        //Descriptions from https://www.freepatentsonline.com/6311228.html
         
         /// <summary>
         /// Indicates that the buttons states specified by the parameter UsagePage is known, but cannot be found in the data provided at Report.
@@ -272,7 +310,15 @@ namespace RawInput.RawInput
         /// Indicates that the report length provided in ReportLength is not the expected length of a report of the type specified in ReportType.
         /// </summary>
         private const int HIDP_STATUS_INVALID_REPORT_LENGTH  = -1072627709;
+        
+        /// <summary>
+        /// Indicates the preparsed HID device data provided at PreparsedData is malformed.
+        /// </summary>
+        private const int HIDP_STATUS_INVALID_PREPARSED_DATA  = -1072627711;
 
+        #endregion
+
+        
         // https://msdn.microsoft.com/ru-ru/library/windows/desktop/ms645597(v=vs.85).aspx
         // Commands for GetRawInputDeviceInfo
         private const uint RIDI_PREPARSEDDATA = 0x20000005;
@@ -295,6 +341,10 @@ namespace RawInput.RawInput
             [In, Out] ushort[] usageList, ref int usageLength, IntPtr preparsedData,
             [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 7)]
             byte[] report, int reportLength);
+        
+        
+        [DllImport("hid.dll", SetLastError = true)]
+        private static extern int HidP_MaxUsageListLength(HIDP_REPORT_TYPE reportType, ushort usagePage, IntPtr preparsedData);
 
         #endregion NativeHidApi
     }
