@@ -22,23 +22,28 @@ namespace RawInput.RawInput
 
         private const int WM_INPUT = 0x00FF;
         private HwndSource _hwndSource;
-        private IntPtr hWindow;
+        private IntPtr _hWindow;
 
-        public bool IsInitialized => _hwndSource != null;
+        public bool IsInitialized => _hwndSource != null && _hwndSource.Handle != IntPtr.Zero;
 
         public void Init(IntPtr hWnd, ILogger logger, Action<Exception, string> exceptionLogger)
         {
-            if (_hwndSource != null)
-            {
+            if (IsInitialized)
                 return;
-            }
 
             Log = logger ?? new LoggerConfiguration().CreateLogger();
             ExceptionLog = exceptionLogger;
-            hWindow = hWnd;
+            _hWindow = hWnd;
             _hwndSource = HwndSource.FromHwnd(hWnd);
             if (_hwndSource != null)
                 _hwndSource.AddHook(WndProc);
+            else
+            {
+                var ex = new Exception("_hwndSource is null");
+                ex.Data.Add("StackTraceCustom", Environment.StackTrace.ToString());
+                ExceptionLog(ex, $"_hwndSource is null, hWnd: {hWnd}");
+                return;
+            }
 
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericKeyboard);
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericMouse);
@@ -70,7 +75,7 @@ namespace RawInput.RawInput
             }
 
             var usageId = (UsageId)Enum.Parse(typeof(UsageId), usageIdString);
-            Device.RegisterDevice(up, usageId, DeviceFlags.InputSink, hWindow);
+            Device.RegisterDevice(up, usageId, DeviceFlags.InputSink, _hWindow);
             
             if (!_deviceTypes.ContainsKey(up))
                 _deviceTypes.Add(up, new List<string> { usageIdString });
