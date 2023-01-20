@@ -209,21 +209,35 @@ namespace RawInput.RawInput
                 return false;
             
             //\\?\HID#HIDCLASS&Col02#1&4784345&1&0001#{4d1e55b2-f16f-11cf-88cb-001111000030}
-            var hidclass = hidInterfacePath.Replace(@"\\?\HID#HIDCLASS&Col02#1&4784345&1&", "").Split('#')[0];
-            var oemPath = $@"System\CurrentControlSet\Enum\ROOT\HIDCLASS\{hidclass}";
+            var hidId = hidInterfacePath.Replace(@"\\?\HID#", "");
+            var hidIdSplit = hidId.Split('#');
+
+            if (hidIdSplit.Length < 2)
+                return false;
+            
+            var hidClass = hidIdSplit[0];
+            var hidClass2 = hidIdSplit[1];
+            
+            //Computer\HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\HID\HIDCLASS&Col02\1&2d595ca7&2&0001
+            // var oemPath = $@"System\CurrentControlSet\Enum\ROOT\HIDCLASS\{hidclass}";
+            var oemPath = $@"System\CurrentControlSet\Enum\HID\{hidClass}\{hidClass2}";
             RegistryKey key = Registry.LocalMachine.OpenSubKey(oemPath);
 
-            var deviceDescObject = key?.GetValue("DeviceDesc");
-            if (deviceDescObject == null)
+            var hardwareIdObject = key?.GetValue("HardwareID");
+            if (hardwareIdObject == null)
                 return false;
-
-            var deviceDesc = deviceDescObject.ToString();
-            var deviceDescSplit = deviceDesc.Split(';');
-            if (deviceDescSplit.Length <= 1)
+            
+            //HID\VID_1234&PID_BEAD&REV_0219&Col02
+            var pathSplit = (hardwareIdObject as string[])?[0].Replace(@"HID\", "").Split('&');
+            
+            if (pathSplit == null)
                 return false;
-
-            oemName = deviceDescSplit[1];
-            return true;
+            
+            var vid = pathSplit.FirstOrDefault(x => x.StartsWith("VID"));
+            var pid = pathSplit.FirstOrDefault(x => x.StartsWith("PID"));
+            var vidPid = $"{vid}&{pid}";
+            
+            return GetDeviceNameByJoystickOEM(vidPid, out oemName);
         }
 
         #endregion InternalMethods
