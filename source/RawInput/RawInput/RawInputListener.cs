@@ -16,6 +16,7 @@ namespace RawInput.RawInput
         public event EventHandler<KeyboardEventArgs> KeyDown;
         public event EventHandler<KeyboardEventArgs> KeyUp;
 
+        public static bool DebugMode {get; set; }
         public static ILogger Log;
         public static Action<Exception, string> ExceptionLog { get; set; }
 
@@ -58,6 +59,9 @@ namespace RawInput.RawInput
             
             //Simucube 2 Pro
             RegisterDeviceType(UsagePage.Generic, nameof(UsageId.LedCompose));
+            
+            //HID-compliant device with FFB
+            RegisterDeviceType(UsagePage.VendorDefinedBegin, nameof(UsageId.AlphanumericAlphanumericDisplay));
 
             Device.RawInput += OnRawInput;
             Device.KeyboardInput += OnKeyboardInput;
@@ -147,25 +151,56 @@ namespace RawInput.RawInput
 
         private void OnRawInput(object sender, RawInputEventArgs e)
         {
+            if (DebugMode)
+                Log.Verbose("RawInputListener: OnRawInput: Device: {Device}, WindowHandle: {Handle}", e?.Device, e?.WindowHandle);
+            
             var handler = ButtonsChanged;
             if (handler == null)
+            {
+                if (DebugMode)
+                    Log.Verbose("RawInputListener: handler is null, while e: {E}", e?.Device);
+                
                 return;
+            }
 
             var hidInput = e as HidInputEventArgs;
             if (hidInput == null)
+            {
+                if (DebugMode)
+                    Log.Verbose("RawInputListener: hidInput is null, while e: {E}", e?.Device);
+                
                 return;
+            }
 
             if (e.Device == IntPtr.Zero)
+            {
+                if (DebugMode)
+                    Log.Verbose("RawInputListener: e.Device is null");
+                
                 return;
+            }
 
             var deviceName = DeviceHelper.SearchDevice(e.Device)?.DeviceName;
 
             if (string.IsNullOrEmpty(deviceName))
+            {
+                if (DebugMode)
+                    Log.Verbose("RawInputListener: deviceName is null, while e: {E}", e.Device);
+                
                 return;
+            }
 
             if (!RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName, out var isFFB))
+            {
+                if (DebugMode && isFFB)
+                    Log.Verbose("RawInputListener: RawInputParser.Parse failed, while e: {E}, deviceName: {DeviceName}", e.Device, deviceName);
+                
                 return;
+            }
 
+            if (DebugMode && isFFB)
+                Log.Verbose("RawInputListener: Returning: {DeviceName}, isFFB: {FFB}, buttons: {ButtonsCount}", oemName, isFFB, pressedButtons.Count);
+            
             handler(this, new GamepadEventArgs(pressedButtons, deviceName, oemName, isFFB));
         }
     }

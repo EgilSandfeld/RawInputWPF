@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Linq;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
+using Serilog;
 using SharpDX.RawInput;
 
 namespace RawInput.RawInput
@@ -32,16 +33,31 @@ namespace RawInput.RawInput
             {
                 preparsedData = GetPreparsedData(hidInput.Device);
                 if (preparsedData == IntPtr.Zero)
+                {
+                    if (RawInputListener.DebugMode)
+                        Log.Verbose("RawInputParser.Parse: preparsedData zero");
+                    
                     return false;
+                }
 
                 HIDP_CAPS hidCaps;
 
                 var getCapsResult = HidP_GetCaps(preparsedData, out hidCaps);
                 if (getCapsResult == HIDP_STATUS_INVALID_PREPARSED_DATA)
+                {
+                    if (RawInputListener.DebugMode)
+                        Log.Verbose("RawInputParser.Parse: HIDP_STATUS_INVALID_PREPARSED_DATA");
+                    
                     return false;
+                }
                 
                 if (!CheckError(getCapsResult, -2, 0))
+                {
+                    if (RawInputListener.DebugMode)
+                        Log.Verbose("RawInputParser.Parse: CheckError getCapsResult -2");
+                    
                     return false;
+                }
                 
                 oemName = GetDeviceName(hidName);
                 (pressedButtons, isFFB) = GetPressedButtons(hidCaps, preparsedData, hidInput.RawData);
@@ -50,7 +66,7 @@ namespace RawInput.RawInput
             {
                 var exceptionId = ex.Data.Contains("ExceptionId") ? ex.Data["ExceptionId"].ToString() : "None";
                 var errorMsg = $"RawInputParser.Parse: {ex.Message} | ExceptionId: {exceptionId}";
-                RawInputListener.Log.Verbose(errorMsg);
+                Log.Verbose(errorMsg);
                 RawInputListener.ExceptionLog?.Invoke(ex, errorMsg);
                 return false;
             }
@@ -102,15 +118,25 @@ namespace RawInput.RawInput
         private static (List<ushort>, bool) GetPressedButtons(HIDP_CAPS hidCaps, IntPtr preparsedData, byte[] rawInputData)
         {
             var ffbMotorsLength = hidCaps.NumberOutputValueCaps;
+            var isFFB = ffbMotorsLength > 0;
             var buttonCapsLength = hidCaps.NumberInputButtonCaps;
             var buttonCaps = new HIDP_BUTTON_CAPS[buttonCapsLength];
             var res = new List<ushort>();
             if (!CheckError(HidP_GetButtonCaps(HIDP_REPORT_TYPE.HidP_Input, buttonCaps, ref buttonCapsLength, preparsedData), -1, buttonCapsLength))
+            {
+                if (RawInputListener.DebugMode)
+                    Log.Verbose("RawInputParser.GetPressedButtons: HidP_GetButtonCaps, buttonCapsLength: {ButtonCapsLength}, preparsedData: {PreparsedData}", buttonCapsLength, preparsedData);
+                
                 return (res, ffbMotorsLength > 0);
+            }
 
+            if (RawInputListener.DebugMode && isFFB)
+                Log.Verbose("RawInputParser.GetPressedButtons: HidP_GetButtonCaps, buttonCaps: {ButtonCaps}, buttonCapsLength: {ButtonCapsLength}", string.Join("+", buttonCaps.Select(x => $"{x.UsagePage}:{x.Usage}")), buttonCapsLength);
+            
             //var usagePages = new HashSet<ushort>();
             //foreach (var bc in buttonCaps)
             //    usagePages.Add(bc.UsagePage);
+            
             
             // foreach (var usagePage in usagePages)
             foreach (var buttonCap in buttonCaps)
@@ -143,13 +169,22 @@ namespace RawInput.RawInput
                 }
 
                 if (!CheckError(result, buttonCap.UsagePage, buttonsLength))
-                    return (res, ffbMotorsLength > 0);
+                {
+                    if (RawInputListener.DebugMode)
+                        Log.Verbose("RawInputParser.GetPressedButtons: HidP_GetUsages error, result: {Result}, UsagePage: {UsagePage}, buttonsLength: {ButtonsLength}, rawInputData.Length: {Length}", result, buttonCap.UsagePage, buttonsLength, rawInputData.Length);
+                    
+                    return (res, isFFB);
+                }
 
                 for (var i = 0; i < buttonsLength; ++i)
                     res.Add(usageList[i]);
             }
 
-            return (res, ffbMotorsLength > 0);
+            if (RawInputListener.DebugMode && isFFB)
+                Log.Verbose("RawInputParser.GetPressedButtons: HidP_GetUsages OK, res: ({Res}), FFB: {FfbMotorsLength}", string.Join("+", res), ffbMotorsLength);
+
+            
+            return (res, isFFB);
         }
 
         private static string GetDeviceName(string hidInterfacePath)
@@ -165,24 +200,36 @@ namespace RawInput.RawInput
             var vidPid = $"{vid}&{pid}";
             try
             {
+                if (RawInputListener.DebugMode)
+                    Log.Verbose("RawInputParser.GetDeviceName: vidPid: {VidPid}, hidInterfacePath: {HidInterfacePath}", vidPid, hidInterfacePath);
+                
                 if (GetDeviceNameByJoystickOEM(vidPid, out var oemName))
                 {
+                    if (RawInputListener.DebugMode)
+                        Log.Verbose("RawInputParser.GetDeviceName: GetDeviceNameByJoystickOEM found: {OemName}", oemName);
+                    
                     _oemNames.Add(hidInterfacePath, oemName);
                     return oemName;
                 }
                 
                 if (GetDeviceNameByHIDCLASS(hidInterfacePath, out oemName))
                 {
+                    if (RawInputListener.DebugMode)
+                        Log.Verbose("RawInputParser.GetDeviceName: GetDeviceNameByHIDCLASS found: {OemName}", oemName);
+                    
                     _oemNames.Add(hidInterfacePath, oemName);
                     return oemName;
                 }
                     
+                if (RawInputListener.DebugMode)
+                    Log.Verbose("RawInputParser.GetDeviceName: Defaulting to: {VidPid}", vidPid);
+                
                 _oemNames.Add(hidInterfacePath, vidPid);
                 return vidPid;
             }
             catch (Exception ex)
             {
-                RawInputListener.Log.Verbose("RawInputParser.GetDeviceName: Error: {Message}, vidPid: {VidPid}, hidInterfacePath: {HidInterfacePath}", ex.Message, vidPid,hidInterfacePath);
+                Log.Verbose("RawInputParser.GetDeviceName: Error: {Message}, vidPid: {VidPid}, hidInterfacePath: {HidInterfacePath}", ex.Message, vidPid,hidInterfacePath);
                 _oemNames.Add(hidInterfacePath, vidPid);
                 return vidPid;
             }
