@@ -165,7 +165,12 @@ namespace RawInput.RawInput
                     //Try continuing from this issue
                     //Indicates that the report length provided in ReportLength is not the expected length of a report of the type specified in ReportType.
                     case HIDP_STATUS_INVALID_REPORT_LENGTH:
+                    {
+                        if (RawInputListener.DebugMode)
+                            Log.Verbose("RawInputParser.GetPressedButtons: HidP_GetUsages ignored error, result: {Result}, UsagePage: {UsagePage}, buttonsLength: {ButtonsLength}, rawInputData.Length: {Length}", result, buttonCap.UsagePage, buttonsLength, rawInputData.Length);
+
                         continue;
+                    }
                 }
 
                 if (!CheckError(result, buttonCap.UsagePage, buttonsLength))

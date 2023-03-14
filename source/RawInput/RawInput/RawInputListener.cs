@@ -48,20 +48,22 @@ namespace RawInput.RawInput
 
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericKeyboard);
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericMouse);
-            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.GenericGamepad));
-            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.GenericJoystick));
-            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.GenericPointer));
+            RegisterDeviceType(UsagePage.Generic, UsageId.GenericGamepad);
+            RegisterDeviceType(UsagePage.Generic, UsageId.GenericJoystick);
+            RegisterDeviceType(UsagePage.Generic, UsageId.GenericPointer);
+            RegisterDeviceType(UsagePage.Generic, UsageId.SimulationSpaceshipSimulationDevice);
             
             //FANATEC ClubSport Wheel Base V2.5
             //FANATEC Podium Wheel Base DD1
             //FANATEC Podium Wheel Base DD2
-            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.LedSelectedIndicator));
+            RegisterDeviceType(UsagePage.Generic, UsageId.LedSelectedIndicator);
+            RegisterDeviceType(UsagePage.Generic, UsageId.GenericCountedBuffer);
             
             //Simucube 2 Pro
-            RegisterDeviceType(UsagePage.Generic, nameof(UsageId.LedCompose));
+            RegisterDeviceType(UsagePage.Generic, UsageId.LedCompose);
             
             //HID-compliant device with FFB
-            RegisterDeviceType(UsagePage.VendorDefinedBegin, nameof(UsageId.AlphanumericAlphanumericDisplay));
+            RegisterDeviceType(UsagePage.VendorDefinedBegin, UsageId.AlphanumericAlphanumericDisplay);
 
             Device.RawInput += OnRawInput;
             Device.KeyboardInput += OnKeyboardInput;
@@ -69,24 +71,24 @@ namespace RawInput.RawInput
         }
 
 
-        private Dictionary<UsagePage, List<string>> _deviceTypes = new ();
-        public bool RegisterDeviceType(UsagePage up, string usageIdString)
+        private Dictionary<UsagePage, List<UsageId>> _deviceTypes = new ();
+        public bool RegisterDeviceType(UsagePage up, UsageId usageId)
         {
-            if (_deviceTypes.ContainsKey(up) && _deviceTypes[up].Contains(usageIdString))
+            if (_deviceTypes.ContainsKey(up) && _deviceTypes[up].Contains(usageId))
             {
-                Log.Verbose("RawInputListener.RegisterDeviceType: Device type already added: {UsagePage}:{UsageId}", up, usageIdString);
+                Log.Verbose("RawInputListener.RegisterDeviceType: Device type already added: {UsagePage}:{UsageId}", up, usageId);
                 return false;
             }
 
-            var usageId = (UsageId)Enum.Parse(typeof(UsageId), usageIdString);
+            //var usageId = (UsageId)Enum.Parse(typeof(UsageId), usageIdString);
             Device.RegisterDevice(up, usageId, DeviceFlags.InputSink, _hWindow);
             
             if (!_deviceTypes.ContainsKey(up))
-                _deviceTypes.Add(up, new List<string> { usageIdString });
+                _deviceTypes.Add(up, new List<UsageId> { usageId });
             else    
-                _deviceTypes[up].Add(usageIdString);
+                _deviceTypes[up].Add(usageId);
             
-            Log.Verbose("RawInputListener.RegisterDeviceType: Device type added: {UsagePage}:{UsageId}", up, usageIdString);
+            Log.Verbose("RawInputListener.RegisterDeviceType: Device type added: {UsagePage}:{UsageId}", up, usageId);
             return true;
         }
 
