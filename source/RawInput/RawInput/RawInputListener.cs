@@ -81,7 +81,7 @@ namespace RawInput.RawInput
         {
             if (_deviceTypes.ContainsKey(up) && _deviceTypes[up].Contains(usageId))
             {
-                Log.Verbose("RawInputListener.RegisterDeviceType: Device type already added: {UsagePage}:{UsageId}", up, usageId);
+                Log.ForContext("Context", "IO").Verbose("RawInputListener.RegisterDeviceType: Device type already added: {UsagePage}:{UsageId}", up, usageId);
                 return false;
             }
 
@@ -93,7 +93,7 @@ namespace RawInput.RawInput
             else    
                 _deviceTypes[up].Add(usageId);
             
-            Log.Verbose("RawInputListener.RegisterDeviceType: Device type added: {UsagePage}:{UsageId}", up, usageId);
+            Log.ForContext("Context", "IO").Verbose("RawInputListener.RegisterDeviceType: Device type added: {UsagePage}:{UsageId}", up, usageId);
             return true;
         }
 
@@ -162,13 +162,13 @@ namespace RawInput.RawInput
             try
             {
                 if (DebugMode)
-                    Log.Verbose("RawInputListener: OnRawInput: Device: {Device}, WindowHandle: {Handle}", e?.Device, e?.WindowHandle);
+                    Log.ForContext("Context", "IO").Verbose("RawInputListener: OnRawInput: Device: {Device}, WindowHandle: {Handle}", e?.Device, e?.WindowHandle);
             
                 var handler = ButtonsChanged;
                 if (handler == null)
                 {
                     if (DebugMode)
-                        Log.Verbose("RawInputListener: handler is null, while e: {E}", e?.Device);
+                        Log.ForContext("Context", "IO").Verbose("RawInputListener: handler is null, while e: {E}", e?.Device);
                 
                     return;
                 }
@@ -177,7 +177,7 @@ namespace RawInput.RawInput
                 if (hidInput == null)
                 {
                     if (DebugMode)
-                        Log.Verbose("RawInputListener: hidInput is null, while e: {E}", e?.Device);
+                        Log.ForContext("Context", "IO").Verbose("RawInputListener: hidInput is null, while e: {E}", e?.Device);
                 
                     return;
                 }
@@ -185,7 +185,7 @@ namespace RawInput.RawInput
                 if (e.Device == IntPtr.Zero)
                 {
                     if (DebugMode)
-                        Log.Verbose("RawInputListener: e.Device is null");
+                        Log.ForContext("Context", "IO").Verbose("RawInputListener: e.Device is null");
                 
                     return;
                 }
@@ -195,7 +195,7 @@ namespace RawInput.RawInput
                 if (string.IsNullOrEmpty(deviceName))
                 {
                     if (DebugMode)
-                        Log.Verbose("RawInputListener: deviceName is null, while e: {E}", e.Device);
+                        Log.ForContext("Context", "IO").Verbose("RawInputListener: deviceName is null, while e: {E}", e.Device);
                 
                     return;
                 }
@@ -203,13 +203,13 @@ namespace RawInput.RawInput
                 if (!RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName, out var isFFB))
                 {
                     if (DebugMode && isFFB)
-                        Log.Verbose("RawInputListener: RawInputParser.Parse failed, while e: {E}, deviceName: {DeviceName}", e.Device, deviceName);
+                        Log.ForContext("Context", "IO").Verbose("RawInputListener: RawInputParser.Parse failed, while e: {E}, deviceName: {DeviceName}", e.Device, deviceName);
                 
                     return;
                 }
 
                 if (DebugMode && isFFB)
-                    Log.Verbose("RawInputListener: Returning: {DeviceName}, isFFB: {FFB}, ButtonsCount: {ButtonsCount}", oemName, isFFB, pressedButtons.Count);
+                    Log.ForContext("Context", "IO").Verbose("RawInputListener: Returning: {DeviceName}, isFFB: {FFB}, ButtonsCount: {ButtonsCount}", oemName, isFFB, pressedButtons.Count);
             
                 handler(this, new GamepadEventArgs(pressedButtons, deviceName, oemName, isFFB));
             }
