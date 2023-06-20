@@ -45,28 +45,52 @@ namespace RawInput.RawInput
                 return;
             }
 
+            RegisterDeviceTypes();
+
+            Device.RawInput += OnRawInput;
+            Device.KeyboardInput += OnKeyboardInput;
+            Device.MouseInput += OnMouseInput;
+        }
+
+        private void RegisterDeviceTypes()
+        {
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericKeyboard);
             //RegisterDeviceType(UsagePage.Generic, UsageId.GenericMouse);
             RegisterDeviceType(UsagePage.Generic, UsageId.GenericGamepad);
             RegisterDeviceType(UsagePage.Generic, UsageId.GenericJoystick);
             RegisterDeviceType(UsagePage.Generic, UsageId.GenericPointer);
             RegisterDeviceType(UsagePage.Generic, UsageId.SimulationSpaceshipSimulationDevice);
-            
+
             //FANATEC ClubSport Wheel Base V2.5
             //FANATEC Podium Wheel Base DD1
             //FANATEC Podium Wheel Base DD2
             RegisterDeviceType(UsagePage.Generic, UsageId.LedSelectedIndicator);
             RegisterDeviceType(UsagePage.Generic, UsageId.GenericCountedBuffer);
-            
+
             //Simucube 2 Pro
             RegisterDeviceType(UsagePage.Generic, UsageId.LedCompose);
-            
+
             //HID-compliant device with FFB
             RegisterDeviceType(UsagePage.VendorDefinedBegin, UsageId.AlphanumericAlphanumericDisplay);
-
-            Device.RawInput += OnRawInput;
-            Device.KeyboardInput += OnKeyboardInput;
-            Device.MouseInput += OnMouseInput;
+            
+            
+            //Logitech G HUB G923 Racing Wheel for XBox One and PC (USB)
+            RegisterDeviceType((UsagePage)(-189), (UsageId)(1540));
+                
+            //Logitech G HUB G920 Driving Force Racing Wheel USB with UsagePage: -189, Usage: 1538
+            RegisterDeviceType((UsagePage)(-189), (UsageId)(1538));
+                
+            //Logitech G HUB PRO Racing Wheel for PlayStation/PC with UsagePage: -189, Usage: 1794
+            RegisterDeviceType((UsagePage)(-189), (UsageId)(1794));
+                
+            //              PRO Racing Wheel for PlayStation/PC with UsagePage: -189, Usage: 1796
+            RegisterDeviceType((UsagePage)(-189), (UsageId)(1796));
+                
+            //G923 Racing Wheel for Xbox One and PC with UsagePage: -3, Usage: -767
+            RegisterDeviceType((UsagePage)(-3), (UsageId)(-767));
+                
+            //G29 Driving Force Racing Wheel with UsagePage: VendorDefinedBegin, Usage: GenericMouse
+            RegisterDeviceType(UsagePage.VendorDefinedBegin, UsageId.GenericMouse);
         }
 
         public async Task<bool> RegisterDevice(UsagePage up, UsageId usageId)
