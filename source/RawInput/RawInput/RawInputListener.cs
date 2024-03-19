@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Input;
 using System.Windows.Interop;
@@ -25,6 +26,10 @@ namespace RawInput.RawInput
         private const int WM_INPUT = 0x00FF;
         private HwndSource _hwndSource;
         private IntPtr _hWindow;
+        private bool _simucube2ProActualButtonsDown;
+
+        private const string Simucube2Pro = "VID_28DE&PID_2300";
+
 
         public void Init(IntPtr hWnd, ILogger logger, Action<Exception, string> exceptionLogger)
         {
@@ -231,6 +236,9 @@ namespace RawInput.RawInput
                 
                     return;
                 }
+                
+                if (FilterSimucube2Pro(oemName, pressedButtons)) 
+                    return;
 
                 if (DebugMode && isFFB)
                     Log.ForContext("Context", "IO").Verbose("RawInputListener: Returning: {DeviceName}, isFFB: {FFB}, ButtonsCount: {ButtonsCount}", oemName, isFFB, pressedButtons.Count);
@@ -241,6 +249,25 @@ namespace RawInput.RawInput
             {
                 Log.Error(ex, "OnRawInput: deviceName: {DeviceName}", deviceName);
             }
+        }
+
+        private bool FilterSimucube2Pro(string oemName, List<ushort> pressedButtons)
+        {
+            if (oemName != Simucube2Pro) 
+                return false;
+            
+            if (pressedButtons.All(x => x == 1))
+                return true;
+                    
+            if (pressedButtons.Count == 0 && !_simucube2ProActualButtonsDown)
+            {
+                _simucube2ProActualButtonsDown = false;
+                return true;
+            }
+
+            _simucube2ProActualButtonsDown = true;
+
+            return false;
         }
     }
 }
