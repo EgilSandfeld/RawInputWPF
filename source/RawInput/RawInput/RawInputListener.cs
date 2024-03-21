@@ -18,17 +18,20 @@ namespace RawInput.RawInput
         public event EventHandler<KeyboardEventArgs> KeyDown;
         public event EventHandler<KeyboardEventArgs> KeyUp;
         public static bool DebugMode {get; set; }
+        public bool PollAll {get; set; }
         public static ILogger Log;
         public static Action<Exception, string> ExceptionLog { get; set; }
         public bool IsInitialized => _hwndSource != null && _hwndSource.Handle != IntPtr.Zero;
 
         private Dictionary<UsagePage, List<UsageId>> _deviceTypes = new ();
+        private HashSet<string> _devicesToPoll = new();
+        private HashSet<string> _devicesToIgnore = new();
         private const int WM_INPUT = 0x00FF;
         private HwndSource _hwndSource;
         private IntPtr _hWindow;
         private bool _simucube2ProActualButtonsDown;
 
-        private const string Simucube2Pro = "VID_28DE&PID_2300";
+        private const string Simucube2Pro = "Simucube 2 Pro"; //"VID_28DE&PID_2300";
 
 
         public void Init(IntPtr hWnd, ILogger logger, Action<Exception, string> exceptionLogger)
@@ -88,7 +91,7 @@ namespace RawInput.RawInput
             //Logitech G HUB PRO Racing Wheel for PlayStation/PC with UsagePage: -189, Usage: 1794
             RegisterDeviceType((UsagePage)(-189), (UsageId)(1794));
                 
-            //              PRO Racing Wheel for PlayStation/PC with UsagePage: -189, Usage: 1796
+            //PRO Racing Wheel for PlayStation/PC with UsagePage: -189, Usage: 1796
             RegisterDeviceType((UsagePage)(-189), (UsageId)(1796));
                 
             //G923 Racing Wheel for Xbox One and PC with UsagePage: -3, Usage: -767
@@ -98,19 +101,50 @@ namespace RawInput.RawInput
             RegisterDeviceType(UsagePage.VendorDefinedBegin, UsageId.GenericMouse);
         }
 
-        public async Task<bool> RegisterDevice(UsagePage up, UsageId usageId)
+        public async Task<bool> RegisterDevice(UsagePage up, UsageId usageId, string interfacePath, bool ignore)
         {
             while (_hWindow == IntPtr.Zero)
                 await Task.Delay(75);
-
-            return RegisterDeviceType(up, usageId);
+            
+            return RegisterDeviceType(up, usageId, interfacePath, ignore);
         }
 
-        private bool RegisterDeviceType(UsagePage up, UsageId usageId)
+        public void ChangePollingForDevice(string interfacePath, bool enable)
         {
+            var interfacePathLowered = interfacePath.ToLower();
+            if (enable && _devicesToPoll.Contains(interfacePathLowered) || !enable && !_devicesToPoll.Contains(interfacePathLowered))
+                return;
+                    
+            if (enable)
+                _devicesToPoll.Add(interfacePathLowered);
+            else
+                _devicesToPoll.Remove(interfacePathLowered);
+        }
+
+        private bool RegisterDeviceType(UsagePage up, UsageId usageId, string interfacePath = null, bool ignore = false)
+        {
+            if (interfacePath != null)
+            {
+                var interfacePathLowered = interfacePath.ToLower();
+                if (ignore)
+                {
+                    /*if (_devicesToPoll.Contains(interfacePathLowered))
+                        _devicesToPoll.Remove(interfacePathLowered);
+                    else*/
+                    _devicesToIgnore.Add(interfacePathLowered);
+                    Log.ForContext("Context", "IO").Verbose("RawInputListener.RegisterDeviceType: Device ignored from polling (has no buttons): {UsagePage}:{UsageId} {InterfacePath}", up, usageId, interfacePath);
+                    return false;
+                }
+                
+                _devicesToPoll.Add(interfacePathLowered);
+            }
+
+            if (up == UsagePage.Undefined)
+                return false;
+            
             if (_deviceTypes.ContainsKey(up) && _deviceTypes[up].Contains(usageId))
             {
-                Log.ForContext("Context", "IO").Verbose("RawInputListener.RegisterDeviceType: Device type already added: {UsagePage}:{UsageId}", up, usageId);
+                Log.ForContext("Context", "IO").Verbose("RawInputListener.RegisterDeviceType: Device already added: {UsagePage}:{UsageId} {InterfacePath}", up, usageId, interfacePath);
                 return false;
             }
 
@@ -227,6 +261,40 @@ namespace RawInput.RawInput
                         Log.ForContext("Context", "IO").Verbose("RawInputListener: deviceName is null, while e: {E}", e.Device);
                 
                     return;
+                }
+
+                var deviceNameLowered = deviceName.ToLower();
+
+                foreach (var toIgnore in _devicesToIgnore)
+                {
+                    if (deviceNameLowered.Contains(toIgnore))
+                    {
+                        if (DebugMode)
+                            Log.ForContext("Context", "IO").Verbose("RawInputListener: deviceName ignored, is in _devicesToIgnore: {E}", e.Device);
+                        
+                        return;
+                    }
+                }
+                
+                if (!PollAll)
+                {
+                    var found = false;
+                    foreach (var toPoll in _devicesToPoll)
+                    {
+                        if (!deviceNameLowered.Contains(toPoll))
+                            continue;
+
+                        found = true;
+                        break;
+                    }
+                    
+                    if (!found)
+                    {
+                        if (DebugMode)
+                            Log.ForContext("Context", "IO").Verbose("RawInputListener: Ignoring deviceName not in _deviceTypesToPoll: {E} {DeviceName}", e.Device, deviceName);
+                
+                        return;
+                    }
                 }
 
                 if (!RawInputParser.Parse(hidInput, out var pressedButtons, deviceName, out var oemName, out var isFFB))
