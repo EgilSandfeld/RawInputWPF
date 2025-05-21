@@ -65,8 +65,8 @@
       <PackageReference Include="Serilog" Version="4.2.0" />
       <PackageReference Include="SharpDX" Version="4.0.1" />
       <PackageReference Include="SharpDX.RawInput" Version="4.0.1" />
-      <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.0" />
-      <PackageReference Include="System.Memory" Version="4.6.0" />
+      <PackageReference Include="System.Diagnostics.DiagnosticSource" Version="9.0.3" />
+      <PackageReference Include="System.Memory" Version="4.6.3" />
     </ItemGroup>
     <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
     <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
